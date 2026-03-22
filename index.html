@@ -143,6 +143,7 @@
     gap: 6px;
     z-index: 10;
   }
+  .gallery-wrap { overflow: hidden; touch-action: pan-y; }
   .gallery-dot {
     width: 7px;
     height: 7px;
@@ -591,7 +592,7 @@
 <div class="gallery">
   <div class="gallery-wrap">
     <img id="main-photo" class="main-photo"
-      src="k9.png"
+      src="k9_opt.jpg"
       alt="Kokon Sensoryczny huśtawka hamak"
       onclick="openModal(this.src)">
     <button class="arrow-btn arrow-left" onclick="galleryNav(-1)">&#8249;</button>
@@ -600,28 +601,28 @@
   </div>
   <div class="thumbs">
     <img class="thumb active"
-      src="k9.png"
+      src="k9_opt.jpg"
       onclick="changePhoto(this)" alt="Dziecko w kokonie sensorycznym">
     <img class="thumb"
-      src="k8.png"
+      src="k8_opt.jpg"
       onclick="changePhoto(this)" alt="Mama z dzieckiem w kokonie">
     <img class="thumb"
-      src="DSC_0105.png"
+      src="DSC_0105_opt.jpg"
       onclick="changePhoto(this)" alt="Chłopiec w czerwonym kokonie">
     <img class="thumb"
-      src="photo_2026-03-22%2023.50.46.jpeg"
+      src="photo_2026-03-22%2023.50.46_opt.jpg"
       onclick="changePhoto(this)" alt="Dziecko zasypia w kokonie">
     <img class="thumb"
-      src="k3.png"
+      src="k3_opt.jpg"
       onclick="changePhoto(this)" alt="Dziewczynka w czerwonym kokonie">
     <img class="thumb"
-      src="k7.png"
+      src="k7_opt.jpg"
       onclick="changePhoto(this)" alt="Czytanie w kokonie sensorycznym">
     <img class="thumb"
-      src="70%20(1).png"
+      src="70%20(1)_opt.jpg"
       onclick="changePhoto(this)" alt="Rozmiar M i L porównanie">
     <img class="thumb"
-      src="k22.png"
+      src="k22_opt.jpg"
       onclick="changePhoto(this)" alt="Dziewczynka uśmiechnięta w kokonie">
   </div>
 </div>
@@ -944,18 +945,43 @@
 
 // GALLERY
 (function() {
-  const photo = document.getElementById('main-photo');
-  const dotsWrap = document.getElementById('gallery-dots');
+  const wrap    = document.querySelector('.gallery-wrap');
+  const dotsWrap= document.getElementById('gallery-dots');
+  let curIdx    = 0;
   let animating = false;
 
   function getThumbs() { return Array.from(document.querySelectorAll('.thumb')); }
-  function getActiveIdx() {
+
+  /* ── Будуємо стрічку зображень ── */
+  function buildStrip() {
     const thumbs = getThumbs();
-    const active = document.querySelector('.thumb.active');
-    return active ? thumbs.indexOf(active) : 0;
+    // Видаляємо старий strip якщо є
+    const old = wrap.querySelector('.img-strip');
+    if (old) old.remove();
+
+    const strip = document.createElement('div');
+    strip.className = 'img-strip';
+    strip.style.cssText = 'display:flex;width:100%;height:100%;will-change:transform;';
+
+    thumbs.forEach((t, i) => {
+      const img = document.createElement('img');
+      img.src = t.src;
+      img.alt = t.alt;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;flex-shrink:0;';
+      if (i === 0) {
+        // замінюємо головне фото на strip
+        const mainPhoto = document.getElementById('main-photo');
+        if (mainPhoto) mainPhoto.style.display = 'none';
+      }
+      img.onclick = () => openModal(img.src);
+      strip.appendChild(img);
+    });
+
+    wrap.insertBefore(strip, wrap.firstChild);
+    return strip;
   }
 
-  // Build dots
+  /* ── Dots ── */
   function buildDots() {
     const thumbs = getThumbs();
     dotsWrap.innerHTML = '';
@@ -968,66 +994,95 @@
   }
 
   function updateDots(idx) {
-    document.querySelectorAll('.gallery-dot').forEach((d, i) => {
-      d.classList.toggle('active', i === idx);
-    });
+    document.querySelectorAll('.gallery-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === idx));
   }
 
-  function goTo(idx, dir) {
+  /* ── Перехід ── */
+  function goTo(idx, animate) {
     if (animating) return;
     const thumbs = getThumbs();
-    const next = thumbs[idx];
-    if (!next) return;
-    animating = true;
+    idx = Math.max(0, Math.min(idx, thumbs.length - 1));
+    const strip = wrap.querySelector('.img-strip');
+    if (!strip) return;
 
-    const slideOut = dir === 1 ? 'slide-left' : 'slide-right';
-    const slideIn  = dir === 1 ? 'slide-right' : 'slide-left';
+    if (animate !== false) {
+      animating = true;
+      strip.style.transition = 'transform 0.32s cubic-bezier(0.25,0.46,0.45,0.94)';
+    } else {
+      strip.style.transition = 'none';
+    }
 
-    photo.classList.add(slideOut);
+    strip.style.transform = `translateX(${-idx * 100}%)`;
+    curIdx = idx;
 
-    setTimeout(() => {
-      photo.src = next.src;
-      photo.classList.remove(slideOut);
-      photo.classList.add(slideIn);
-      // force reflow
-      photo.getBoundingClientRect();
-      photo.classList.remove(slideIn);
+    thumbs.forEach(t => t.classList.remove('active'));
+    thumbs[idx].classList.add('active');
+    thumbs[idx].scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+    updateDots(idx);
 
-      thumbs.forEach(t => t.classList.remove('active'));
-      next.classList.add('active');
-      next.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      updateDots(idx);
-      animating = false;
-    }, 320);
+    if (animate !== false) {
+      setTimeout(() => { animating = false; }, 340);
+    }
   }
 
   window.galleryNav = function(dir) {
     const thumbs = getThumbs();
-    const cur = getActiveIdx();
-    let next = cur + dir;
+    let next = curIdx + dir;
     if (next < 0) next = thumbs.length - 1;
     if (next >= thumbs.length) next = 0;
-    goTo(next, dir);
+    goTo(next, true);
   };
 
   window.changePhoto = function(thumb) {
-    const thumbs = getThumbs();
-    const cur = getActiveIdx();
-    const next = thumbs.indexOf(thumb);
-    const dir = next >= cur ? 1 : -1;
-    goTo(next, dir);
+    const idx = getThumbs().indexOf(thumb);
+    goTo(idx, true);
   };
 
-  // Touch swipe
-  let startX = 0;
-  photo.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
-  photo.addEventListener('touchend', e => {
-    const diff = startX - e.changedTouches[0].clientX;
-    if (Math.abs(diff) < 40) return;
-    galleryNav(diff > 0 ? 1 : -1);
-  }, { passive: true });
+  /* ── Drag / swipe що слідує за пальцем ── */
+  (function() {
+    let startX = 0, dragX = 0, dragging = false;
+    const W = () => wrap.offsetWidth;
 
+    function getStrip() { return wrap.querySelector('.img-strip'); }
+
+    wrap.addEventListener('touchstart', e => {
+      if (animating) return;
+      startX = e.touches[0].clientX;
+      dragX  = 0;
+      dragging = true;
+      const s = getStrip();
+      if (s) s.style.transition = 'none';
+    }, { passive: true });
+
+    wrap.addEventListener('touchmove', e => {
+      if (!dragging) return;
+      dragX = e.touches[0].clientX - startX;
+      const s = getStrip();
+      if (!s) return;
+      // Опір на краях
+      const thumbs = getThumbs();
+      const atStart = curIdx === 0 && dragX > 0;
+      const atEnd   = curIdx === thumbs.length - 1 && dragX < 0;
+      const offset  = atStart || atEnd ? dragX * 0.25 : dragX;
+      s.style.transform = `translateX(calc(${-curIdx * 100}% + ${offset}px))`;
+    }, { passive: true });
+
+    wrap.addEventListener('touchend', () => {
+      if (!dragging) return;
+      dragging = false;
+      const threshold = W() * 0.25; // 25% ширини щоб переключити
+      if (dragX < -threshold) galleryNav(1);
+      else if (dragX > threshold) galleryNav(-1);
+      else goTo(curIdx, true); // повернутись назад
+    });
+  })();
+
+  const strip = buildStrip();
   buildDots();
+  // Початкова позиція без анімації
+  strip.style.transition = 'none';
+  strip.style.transform  = 'translateX(0)';
 })();
 
 // MODAL
